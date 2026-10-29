@@ -1,54 +1,95 @@
-# Student Event Management System (Java JDBC & Oracle Free PL/SQL)
+# Student Event Management System
 
-A clean, production-grade **Student Event Management System** built with **Java JDBC** and **Oracle Database 23c / 23ai Free** (or Oracle XE).
+A console application built with **Java JDBC** and **Oracle PL/SQL**. Students register for campus events. When an event is full, new registrations go on a waitlist, and the earliest waitlisted student is promoted automatically when someone cancels.
 
-Pre-configured to run directly in **Visual Studio Code** in under 3 minutes!
+Tested on **Oracle Database 11g Express Edition (XE)** with **JDK 23** in Visual Studio Code.
 
----
+## Features
 
-## 🚀 3-Minute Quickstart in VS Code
+- Add and list students and events (JDBC `PreparedStatement`)
+- Register a student through a stored procedure with 3 IN and 3 OUT parameters (`CallableStatement`)
+- Calculate event revenue through a stored function
+- Cancel a registration with a refund, and promote the next waitlisted student
+- Automatic audit log written by an Oracle row-level trigger
+- Capacity guard trigger that blocks lowering capacity below confirmed registrations
 
-### 1. Open in Visual Studio Code
-- Extract this project into a folder.
-- Open VS Code: `File -> Open Folder` -> Select the project root.
-- Ensure the **Extension Pack for Java** is installed (VS Code will prompt you if missing).
-- Install a **JDK 25 (LTS)** and Apache Maven 3.9+; the project compiles with the Java 25 API and bytecode level.
+## Project structure
 
-### 2. Start Oracle Database Free
-Choose either **Docker (Recommended)** or **Local Oracle**:
-
-#### With Docker (Instant):
-Run in your VS Code terminal:
-```bash
-docker compose up -d
 ```
-*(Starts Oracle 23c Free on port `1521` with password `StudentPass123#`)*
+sql/                      Database scripts, run in order 01 to 05
+src/main/java/com/studentevents/
+    Main.java             Console menu
+    DatabaseConnection.java   Opens the JDBC connection
+    dao/                  JDBC code (EventDAO, StudentDAO, RegistrationDAO)
+    model/                Plain Java classes
+src/main/resources/db.properties   Connection settings
+pom.xml                   Maven build and Oracle JDBC driver
+```
 
-### 3. Initialize Database Schema & PL/SQL
-In VS Code, run the SQL scripts in `sql/` in order using SQL*Plus, SQLcl, or the **Oracle Developer Tools for VS Code** extension:
-1. `sql/01_oracle_free_setup.sql` (Creates user `student_admin` & grants rights)
-2. `sql/02_schema_ddl.sql` (Creates `EVENTS`, `STUDENTS`, `REGISTRATIONS`, `EVENT_AUDIT_LOGS`)
-3. `sql/03_plsql_procedures_functions.sql` (Creates `SP_REGISTER_STUDENT_EVENT`, `FN_CALCULATE_EVENT_REVENUE`, `SP_CANCEL_REGISTRATION`)
-4. `sql/04_triggers.sql` (Creates `TRG_REGISTRATION_AUDIT`, `TRG_EVENT_CAPACITY_GUARD`)
-5. `sql/05_seed_data.sql` (Populates sample events, students, registrations)
+## Setup
 
-### 4. Run the Java Application
-- Open `src/main/java/com/studentevents/Main.java` in VS Code.
-- Press **F5** or click the **Run** button at the top-right.
-- The interactive command-line interface will start right in your VS Code terminal!
+### 1. Requirements
 
----
+- Oracle Database XE 11g (or newer) running locally on port 1521
+- JDK 17 or newer
+- Visual Studio Code with the **Extension Pack for Java**
 
-## 🧩 Key Java JDBC & PL/SQL Concepts Demonstrated
+### 2. Create the user and tables
 
-1. **JDBC PreparedStatement**:
-   - Parameterized queries to prevent SQL injection for listing, adding, and filtering events and students.
-2. **JDBC CallableStatement with PL/SQL Stored Procedure**:
-   - Calling `SP_REGISTER_STUDENT_EVENT` with 3 IN parameters and 3 OUT parameters (returns generated registration ID, unique ticket code, and status message).
-3. **JDBC CallableStatement with PL/SQL Stored Function**:
-   - Calling `FN_CALCULATE_EVENT_REVENUE(?)` returning a scalar numeric value.
-4. **Oracle Row-Level Trigger**:
-   - `TRG_REGISTRATION_AUDIT` automatically records ticket generation and cancellations in `EVENT_AUDIT_LOGS` on every INSERT or UPDATE.
-5. **Capacity Guard & Automatic Waitlist**:
-   - When an event hits maximum capacity, the PL/SQL procedure automatically marks registrations as `WAITLISTED`.
-   - When a confirmed student cancels, the procedure automatically promotes the earliest waitlisted student!
+From the project folder, open SQL*Plus as an administrator:
+
+```
+sqlplus / as sysdba
+```
+
+Then run the scripts in order:
+
+```
+@sql/01_oracle_free_setup.sql
+```
+
+This creates the user `student_admin` (password `StudentPass123#`). Then connect as that user and run the rest:
+
+```
+CONNECT student_admin/"StudentPass123#"@localhost:1521/XE
+SET DEFINE OFF
+@sql/02_schema_ddl.sql
+@sql/03_plsql_procedures_functions.sql
+@sql/04_triggers.sql
+@sql/05_seed_data.sql
+```
+
+Each script should print "created" messages and no compilation errors.
+
+### 3. Check the connection settings
+
+`src/main/resources/db.properties`:
+
+```
+db.url=jdbc:oracle:thin:@localhost:1521/XE
+db.user=student_admin
+db.password=StudentPass123#
+```
+
+The URL has four parts: the driver (`jdbc:oracle:thin`), the host (`localhost`), the listener port (`1521`) and the service name (`XE`).
+
+### 4. Run the application
+
+Open `src/main/java/com/studentevents/Main.java` in VS Code and use the Java extension's **Run** button. A menu appears in the terminal. The first line printed should be `SUCCESS: Connected to Oracle Database successfully!`.
+
+## Other Oracle versions
+
+- **Oracle Database 23ai Free (or XE 21c):** use the service name `FREEPDB1` (or `XEPDB1` for XE 21c) in `db.properties`, and add `ALTER SESSION SET CONTAINER = FREEPDB1;` at the top of `sql/01_oracle_free_setup.sql`.
+- **Docker:** `docker compose up -d` starts Oracle 23ai Free on port 1521 with password `StudentPass123#`. Use the `FREEPDB1` settings above.
+
+## Database objects
+
+| Type | Name | Purpose |
+|---|---|---|
+| Tables | `EVENTS`, `STUDENTS`, `REGISTRATIONS`, `EVENT_AUDIT_LOGS` | Core data |
+| Sequences | `SEQ_EVENT_ID`, `SEQ_STUDENT_ID`, `SEQ_REGISTRATION_ID`, `SEQ_AUDIT_LOG_ID` | Generated IDs |
+| Procedure | `SP_REGISTER_STUDENT_EVENT` | Confirms or waitlists a registration |
+| Procedure | `SP_CANCEL_REGISTRATION` | Cancels, refunds and promotes the waitlist |
+| Function | `FN_CALCULATE_EVENT_REVENUE` | Total fees from confirmed registrations |
+| Trigger | `TRG_REGISTRATION_AUDIT` | Logs every registration and status change |
+| Trigger | `TRG_EVENT_CAPACITY_GUARD` | Protects event capacity |
