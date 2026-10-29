@@ -1,0 +1,16 @@
+
+
+services:
+  oracle-free:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: oracle-23c-free
+    ports:
+      - "1521:1521"
+    environment:
+      - ORACLE_PWD=StudentPass123#
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    restart: always
+
+volumes:
+  oracle-data:
